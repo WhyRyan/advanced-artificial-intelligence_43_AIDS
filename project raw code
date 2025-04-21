@@ -1,0 +1,104 @@
+# Save the full PlantDoc+ project code in a .py file for download
+full_code = '''
+# PlantDoc+ - Transfer Learning for Plant Disease Detection
+
+# 1. Install Required Libraries
+# pip install tensorflow keras gradio numpy matplotlib pillow
+
+# 2. Import Libraries
+import tensorflow as tf
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.optimizers import Adam
+import matplotlib.pyplot as plt
+import gradio as gr
+import numpy as np
+from PIL import Image
+
+# 3. Dataset Preparation (Adjust Paths)
+train_dir = '/path/to/plantdoc/train'
+val_dir = '/path/to/plantdoc/test'
+
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    zoom_range=0.2,
+    horizontal_flip=True
+)
+
+val_datagen = ImageDataGenerator(rescale=1./255)
+
+train_generator = train_datagen.flow_from_directory(
+    train_dir,
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='categorical'
+)
+
+val_generator = val_datagen.flow_from_directory(
+    val_dir,
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='categorical'
+)
+
+# 4. Model: Transfer Learning with MobileNetV2
+base_model = MobileNetV2(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+for layer in base_model.layers:
+    layer.trainable = False
+
+x = base_model.output
+x = GlobalAveragePooling2D()(x)
+x = Dense(1024, activation='relu')(x)
+predictions = Dense(train_generator.num_classes, activation='softmax')(x)
+
+model = Model(inputs=base_model.input, outputs=predictions)
+
+model.compile(optimizer=Adam(learning_rate=0.0001),
+              loss='categorical_crossentropy',
+              metrics=['accuracy'])
+
+# 5. Train the Model
+history = model.fit(
+    train_generator,
+    steps_per_epoch=len(train_generator),
+    epochs=10,
+    validation_data=val_generator,
+    validation_steps=len(val_generator)
+)
+
+# 6. Plot Accuracy (Optional)
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Val Accuracy')
+plt.legend()
+plt.title("Model Accuracy")
+plt.show()
+
+# 7. Save Model
+model.save("plantdoc_model.h5")
+
+# 8. Gradio Deployment
+model = tf.keras.models.load_model("plantdoc_model.h5")
+class_names = list(train_generator.class_indices.keys())
+
+def predict_leaf(image):
+    image = image.resize((224, 224))
+    img_array = tf.keras.preprocessing.image.img_to_array(image)
+    img_array = tf.expand_dims(img_array, 0) / 255.0
+    predictions = model.predict(img_array)[0]
+    return {class_names[i]: float(predictions[i]) for i in range(len(class_names))}
+
+gr.Interface(fn=predict_leaf,
+             inputs=gr.Image(type="pil"),
+             outputs=gr.Label(num_top_classes=3),
+             title="PlantDoc+: Plant Disease Classifier",
+             description="Upload a leaf image to detect its disease.").launch()
+'''
+
+# Save to a file
+code_file_path = "/mnt/data/PlantDoc_Plus_Project_Code.py"
+with open(code_file_path, "w") as f:
+    f.write(full_code)
+
+code_file_path
